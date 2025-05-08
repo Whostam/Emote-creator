@@ -2,7 +2,7 @@ import os
 import streamlit as st
 import openai
 from dotenv import load_dotenv
-from openai.error import InvalidRequestError
+from openai.exceptions import InvalidRequestError
 
 # Optionally load local environment variables from a .env file
 load_dotenv()
@@ -34,7 +34,6 @@ size = st.selectbox(
 )
 
 # Function to generate style-preserving variations
-@st.cache_data
 def generate_variations(image_file, n, size):
     response = openai.images.create_variation(
         image=image_file,
@@ -43,7 +42,7 @@ def generate_variations(image_file, n, size):
     )
     return [item.url for item in response.data]
 
-# Generate button
+# Generate button behavior
 if st.button("Generate New Emotes"):
     if not uploaded_files:
         st.warning("Please upload at least one emote to get started.")
@@ -55,8 +54,8 @@ if st.button("Generate New Emotes"):
                     urls = generate_variations(file, num_variations, size)
                     results[file.name] = urls
                 except InvalidRequestError as e:
-                    # Handle billing limit reached or other bad requests
-                    code = getattr(e, 'code', None)
+                    # Handle billing limit reached or other invalid requests
+                    code = e.error.get('code') if hasattr(e, 'error') else None
                     if code == "billing_hard_limit_reached":
                         st.error(
                             "Your billing hard limit has been reached. "
