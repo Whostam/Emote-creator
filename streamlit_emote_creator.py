@@ -33,7 +33,6 @@ size = st.selectbox(
 )
 
 # Function to generate style-preserving variations
-@st.cache_data
 def generate_variations(image_file, n, size):
     response = openai.images.create_variation(
         image=image_file,
@@ -53,8 +52,19 @@ if st.button("Generate New Emotes"):
                 try:
                     urls = generate_variations(file, num_variations, size)
                     results[file.name] = urls
+                except openai.error.InvalidRequestError as e:
+                    # Handle billing limit reached
+                    if getattr(e, 'code', '') == "billing_hard_limit_reached":
+                        st.error(
+                            "Your billing hard limit has been reached. "
+                            "Please visit your OpenAI dashboard to increase your limit or add funds: "
+                            "https://platform.openai.com/account/billing/limits"
+                        )
+                    else:
+                        st.error(f"Error with {file.name}: {e}")
                 except Exception as e:
-                    st.error(f"Error with {file.name}: {e}")
+                    st.error(f"Unexpected error with {file.name}: {e}")
+
         # Display results
         for original, urls in results.items():
             st.subheader(f"From: {original}")
