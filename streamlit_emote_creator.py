@@ -1,62 +1,63 @@
-# streamlit_emote_creator.py
-
 import os
 import streamlit as st
 import openai
+from dotenv import load_dotenv
 
-# Set your OpenAI API key as an environment variable:
-#   export OPENAI_API_KEY="your_key_here"
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Optionally load local environment variables from a .env file
+load_dotenv()
 
-def generate_variations(image_file, num_variations: int, size: str = "256x256"):
-    """
-    Create style-preserving variations of an uploaded image.
-    Uses the DALL·E 2 variations endpoint under the hood.
-    """
-    response = openai.Image.create_variation(
-        image=image_file,       # file-like (e.g. BytesIO from st.file_uploader)
-        n=num_variations,       # how many new emotes per original
-        size=size               # "256x256", "512x512", etc.
-    )
-    # API returns URLs by default; we can display those directly in Streamlit
-    return [data["url"] for data in response["data"]]
+# Retrieve the OpenAI API key from Streamlit secrets or environment variables
+openai.api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
 
-# Streamlit UI
+# Page configuration
+st.set_page_config(
+    page_title="AI Emote Creator",
+    layout="centered",
+)
+
 st.title("🖼️ AI Emote Creator with Sora-enabled API")
 
+# File uploader for original emotes
 uploaded_files = st.file_uploader(
-    "Upload your original emotes",
+    "Upload your original emotes (PNG or JPG)",
     type=["png", "jpg"],
     accept_multiple_files=True
 )
 
+# Controls: number of variations and output size
 num_variations = st.slider(
-    "Variations per emote",
-    min_value=1, max_value=5, value=3
+    "Variations per emote", min_value=1, max_value=5, value=3
 )
-
 size = st.selectbox(
-    "Output emote size",
-    options=["256x256", "512x512", "1024x1024"]
+    "Output emote size", options=["256x256", "512x512", "1024x1024"]
 )
 
+# Function to generate style-preserving variations
+@st.cache_data
+def generate_variations(image_file, n, size):
+    response = openai.images.create_variation(
+        image=image_file,
+        n=n,
+        size=size
+    )
+    return [item.url for item in response.data]
+
+# Generate button
 if st.button("Generate New Emotes"):
     if not uploaded_files:
         st.warning("Please upload at least one emote to get started.")
     else:
-        all_urls = []
+        results = {}
         with st.spinner("Creating emote variations..."):
             for file in uploaded_files:
-                # Streamlit gives us an UploadedFile, which behaves like a file-like object
-                urls = generate_variations(file, num_variations, size)
-                all_urls.extend(urls)
-
-        # Display results in a grid
-        cols = st.columns(num_variations)
-        idx = 0
-        for i, orig in enumerate(uploaded_files):
-            st.subheader(f"From: {orig.name}")
-            row_urls = all_urls[idx : idx + num_variations]
-            idx += num_variations
-            for col, img_url in zip(cols, row_urls):
+                try:
+                    urls = generate_variations(file, num_variations, size)
+                    results[file.name] = urls
+                except Exception as e:
+                    st.error(f"Error with {file.name}: {e}")
+        # Display results
+        for original, urls in results.items():
+            st.subheader(f"From: {original}")
+            cols = st.columns(len(urls))
+            for col, img_url in zip(cols, urls):
                 col.image(img_url, use_column_width=True)
